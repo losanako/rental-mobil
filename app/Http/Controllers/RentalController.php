@@ -61,7 +61,7 @@ class RentalController extends Controller
             $car = Car::find($validated['car_id']);
             $start = Carbon::parse($validated['rental_date']);
             $end = Carbon::parse($validated['return_date']);
-            $days = $start->diffInDays($end) + 1;
+            $days = (int) $start->diffInDays($end) + 1;
             $total_price = $days * $car->price_per_day;
             
             $rental = Rental::create([
@@ -121,7 +121,7 @@ class RentalController extends Controller
                 $car = Car::find($validated['car_id'] ?? $rental->car_id);
                 $start = Carbon::parse($validated['rental_date'] ?? $rental->rental_date);
                 $end = Carbon::parse($validated['return_date'] ?? $rental->return_date);
-                $days = $start->diffInDays($end) + 1;
+                $days = (int) $start->diffInDays($end) + 1;
                 $validated['total_price'] = $days * $car->price_per_day;
             }
             

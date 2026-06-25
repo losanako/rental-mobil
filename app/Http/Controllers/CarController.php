@@ -42,41 +42,9 @@ class CarController extends Controller
         ]);
     }
 
+    // Tambah satu mobil. Untuk menambah banyak sekaligus, pakai endpoint /cars/batch.
     public function store(Request $request)
     {
-        if (is_array($request->all()) && !isset($request->brand)) {
-            $successCount = 0;
-            $errors = [];
-            
-            foreach ($request->all() as $index => $carData) {
-                try {
-                    $validated = validator($carData, [
-                        'brand' => 'required|string|max:255',
-                        'model' => 'required|string|max:255',
-                        'plate_number' => 'required|string|unique:cars',
-                        'year' => 'required|integer|min:1900|max:' . (date('Y') + 1),
-                        'color' => 'required|string|max:50',
-                        'price_per_day' => 'required|integer|min:0',
-                        'status' => 'required|in:available,rented,maintenance'
-                    ])->validate();
-                    
-                    Car::create($validated);
-                    $successCount++;
-                } catch (\Exception $e) {
-                    $errors[] = "Data ke-" . ($index + 1) . " gagal: " . $e->getMessage();
-                }
-            }
-            
-            return response()->json([
-                'success' => true,
-                'message' => "Berhasil menambah {$successCount} mobil",
-                'total_data' => count($request->all()),
-                'success_count' => $successCount,
-                'failed_count' => count($request->all()) - $successCount,
-                'errors' => $errors
-            ]);
-        }
-        
         $validated = $request->validate([
             'brand' => 'required|string|max:255',
             'model' => 'required|string|max:255',
