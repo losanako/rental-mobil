@@ -4,9 +4,7 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "preDeployCommand": "mkdir -p /data && touch /data/database.sqlite && php artisan migrate --force",
     "startCommand": "sh deploy/railway-start.sh",
-    "healthcheckPath": "/up",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 3
   }

@@ -1,15 +1,18 @@
 #!/usr/bin/env sh
-# Start command untuk Railway.
-# Dijalankan via "sh deploy/railway-start.sh" dari railway.json.
-# Membaca $PORT dari environment (Railway meng-inject-nya) dan menjalankan
-# web server yang mengikat 0.0.0.0:$PORT — interface yang dijangkau Railway.
+# Satu start command untuk Railway: siapkan DB -> migrasi -> jalankan server.
+# Semua dalam satu container supaya log linear & volume /data pasti ter-mount.
 set -e
 
 PORT="${PORT:-8080}"
-echo ">>> Starting Laravel web server on 0.0.0.0:${PORT}"
 
-# Bersihkan cache config supaya env terbaru terpakai
+echo ">>> [start] preparing sqlite database at /data"
+mkdir -p /data
+touch /data/database.sqlite
+
+echo ">>> [start] running migrations"
+php artisan migrate --force --no-interaction
+
 php artisan config:clear || true
 
-# exec agar php jadi PID 1 (menerima sinyal stop dengan benar dari Railway)
+echo ">>> [start] launching web server on 0.0.0.0:${PORT}"
 exec php artisan serve --host 0.0.0.0 --port "${PORT}"
