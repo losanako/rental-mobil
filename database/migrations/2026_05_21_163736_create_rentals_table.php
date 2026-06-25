@@ -1,5 +1,3 @@
-// database/migrations/xxxx_xx_xx_create_rentals_table.php
-
 <?php
 
 use Illuminate\Database\Migrations\Migration;

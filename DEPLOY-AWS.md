@@ -1,11 +1,13 @@
-# Deploy Laravel ke AWS EC2 (Free Tier) — Step by Step
+# Deploy Laravel API ke AWS Lightsail — Step by Step
 
-Panduan ini memakai **AWS EC2 t2.micro/t3.micro (Free Tier, gratis 12 bulan)** +
-**Nginx + PHP-FPM + SQLite**. Ini opsi **termurah** (tanpa biaya RDS/Load Balancer)
-dan cocok untuk pelajar. Database SQLite disimpan di disk instance (persisten,
-tidak hilang saat restart).
+Panduan ini memakai **AWS Lightsail (instance Ubuntu, paket $5/bulan)** +
+**Nginx + PHP-FPM 8.4 + SQLite**. Opsi murah & sederhana, cocok untuk app kecil.
+Database SQLite disimpan di disk instance (persisten, tidak hilang saat restart).
 
-Estimasi waktu: ~30–45 menit.
+> App ini **API-only** (REST + Sanctum token). Tidak ada build frontend (Vite),
+> jadi tidak perlu Node.js di server.
+
+Estimasi waktu: ~20–30 menit.
 
 ---
 
@@ -14,109 +16,89 @@ Estimasi waktu: ~30–45 menit.
 | File | Fungsi |
 |---|---|
 | [deploy/nginx.conf](deploy/nginx.conf) | Konfigurasi web server Nginx untuk Laravel |
-| [deploy/setup.sh](deploy/setup.sh) | Provisioning server (sekali jalan): install PHP, Nginx, Composer, Node, swap |
+| [deploy/setup.sh](deploy/setup.sh) | Provisioning server (sekali jalan): install PHP, Nginx, Composer, swap |
 | [deploy/deploy.sh](deploy/deploy.sh) | Deploy/update aplikasi (bisa diulang) |
+| [.env.production.example](.env.production.example) | Contoh konfigurasi `.env` untuk produksi |
 
 ---
 
-## BAGIAN 1 — Buat & Launch EC2 Instance
+## BAGIAN 1 — Buat Instance Lightsail
 
-### 1.1 Login AWS
-1. Buka https://aws.amazon.com → **Create an AWS Account** (butuh kartu, tapi Free Tier $0).
-2. Login ke **AWS Management Console**.
-3. Di kanan atas, pilih **Region** terdekat, mis. `Asia Pacific (Singapore) ap-southeast-1`.
+1. Buka https://lightsail.aws.amazon.com → login akun AWS.
+2. Klik **Create instance**.
+3. **Instance location**: pilih region terdekat, mis. `Asia Pacific (Singapore)`.
+4. **Platform**: pilih **Linux/Unix**.
+5. **Blueprint**: pilih **OS Only** → **Ubuntu 24.04 LTS**.
+6. **Instance plan**: pilih paket **$5/bulan** (1 GB RAM) — disarankan minimal ini
+   (paket $3.5 dengan 512 MB RAM juga bisa karena `setup.sh` membuat swap 2 GB).
+7. **Identify your instance**: beri nama `rental-mobil`.
+8. Klik **Create instance**. Tunggu status jadi **Running**.
 
-### 1.2 Launch Instance
-1. Cari **EC2** di search bar → buka **EC2 Dashboard** → klik **Launch instance**.
-2. **Name**: `rental-mobil`.
-3. **Application and OS Images**: pilih **Ubuntu Server 24.04 LTS** (pastikan label **Free tier eligible**).
-4. **Instance type**: pilih **t2.micro** atau **t3.micro** (yang bertanda **Free tier eligible**).
-5. **Key pair (login)**: klik **Create new key pair**
-   - Name: `rental-mobil-key`
-   - Type: RSA, Format: **.pem**
-   - Klik **Create** → file `rental-mobil-key.pem` ter-download. **SIMPAN, jangan hilang.**
-6. **Network settings** → klik **Edit**, centang:
-   - ✅ Allow SSH traffic from **My IP** (lebih aman) atau Anywhere
-   - ✅ Allow HTTP traffic from the internet
-   - ✅ Allow HTTPS traffic from the internet
-7. **Configure storage**: biarkan default (8 GB gp3 cukup, masih Free Tier sampai 30 GB).
-8. Klik **Launch instance** → **View all instances**.
-9. Tunggu **Instance state = Running** dan **Status check = 2/2 passed**.
-10. Klik instance-nya, catat **Public IPv4 address** (mis. `13.250.xx.xx`).
+### 1.1 Pasang Static IP (penting agar IP tidak berubah)
+1. Di Lightsail, buka tab **Networking** → **Create static IP**.
+2. Attach ke instance `rental-mobil`. Catat IP-nya (mis. `13.250.xx.xx`).
+
+### 1.2 Buka port HTTP di firewall
+1. Klik instance `rental-mobil` → tab **Networking**.
+2. Di **IPv4 Firewall**, klik **Add rule** → pilih **HTTP (TCP 80)** → **Create**.
+   (SSH port 22 sudah terbuka secara default.)
 
 ---
 
 ## BAGIAN 2 — Connect via SSH
 
-Di terminal komputer Anda (macOS/Linux), masuk ke folder tempat file `.pem` berada:
+Cara termudah: di halaman instance Lightsail, klik tombol **Connect using SSH**
+(terminal browser langsung terbuka, tidak perlu key).
+
+Atau dari terminal komputer sendiri (unduh default key di Lightsail → Account → SSH keys):
 
 ```bash
-chmod 400 rental-mobil-key.pem
-ssh -i rental-mobil-key.pem ubuntu@<PUBLIC_IP>
+chmod 400 LightsailDefaultKey.pem
+ssh -i LightsailDefaultKey.pem ubuntu@<STATIC_IP>
 ```
 
-Ganti `<PUBLIC_IP>` dengan IP dari langkah 1.10. Ketik `yes` saat ditanya pertama kali.
 Kalau berhasil, prompt berubah jadi `ubuntu@ip-...:~$`.
-
-> **Windows**: pakai aplikasi terminal (PowerShell) dengan perintah sama, atau pakai
-> PuTTY (konversi `.pem` → `.ppk` dulu via PuTTYgen).
 
 ---
 
-## BAGIAN 3 — Ambil Kode & Provisioning Server
-
-### 3.1 Clone project ke server
-Project harus ada di GitHub dulu. Dari dalam server (SSH):
+## BAGIAN 3 — Ambil Kode & Provisioning
 
 ```bash
+# Clone repo ke /var/www/rental-mobil
 sudo mkdir -p /var/www
-sudo chown ubuntu:ubuntu /var/www
-cd /var/www
-git clone https://github.com/<username>/<repo-rental-mobil>.git rental-mobil
-cd rental-mobil
-```
+sudo chown -R ubuntu:ubuntu /var/www
+git clone <URL_REPO_ANDA> /var/www/rental-mobil
+cd /var/www/rental-mobil
 
-> Kalau repo private, buat **Personal Access Token** di GitHub dan pakai sebagai password,
-> atau setup SSH deploy key.
-
-### 3.2 Jalankan provisioning (sekali saja)
-
-```bash
-chmod +x deploy/*.sh
+# Provisioning server (install PHP 8.4, Nginx, Composer, swap, pasang nginx.conf)
 bash deploy/setup.sh
 ```
 
-Script ini memasang PHP 8.4, Nginx, Composer, Node 22, membuat swap 2 GB,
-dan mengaktifkan konfigurasi Nginx. Tunggu sampai muncul **SELESAI**.
+Tunggu sampai muncul **SELESAI**. (Script ini cukup dijalankan **sekali**.)
 
 ---
 
-## BAGIAN 4 — Konfigurasi `.env` Produksi
+## BAGIAN 4 — Konfigurasi .env
 
 ```bash
-cp .env.example .env
+cp .env.production.example .env
 nano .env
 ```
 
-Ubah/isi nilai berikut (sisanya boleh default):
+Ubah nilai berikut:
 
 ```env
-APP_NAME="Rental Mobil"
+APP_NAME="Rental Mobil API"
 APP_ENV=production
 APP_DEBUG=false
-APP_URL=http://<PUBLIC_IP>
+APP_URL=http://<STATIC_IP>
 
 DB_CONNECTION=sqlite
-# Baris DB_HOST/DB_PORT/DB_DATABASE/DB_USERNAME/DB_PASSWORD biarkan dikomentari (#)
-
-SESSION_DRIVER=database
-CACHE_STORE=database
-QUEUE_CONNECTION=database
 ```
 
 Simpan di nano: `Ctrl+O` → `Enter` → `Ctrl+X`.
 
-> `APP_KEY` belum diisi — akan di-generate otomatis oleh `deploy.sh` di bagian berikut.
+> `APP_KEY` dibiarkan kosong — akan di-generate otomatis oleh `deploy.sh`.
 
 ---
 
@@ -126,23 +108,39 @@ Simpan di nano: `Ctrl+O` → `Enter` → `Ctrl+X`.
 bash deploy/deploy.sh
 ```
 
-Script ini akan: install dependency, build asset, generate `APP_KEY`, buat SQLite,
-jalankan migrasi, cache config, dan set permission. Tunggu sampai **DEPLOY SELESAI**.
+Script ini akan: install dependency PHP (production), generate `APP_KEY`,
+buat database SQLite, jalankan migrasi, cache config, dan set permission.
+Tunggu sampai **DEPLOY SELESAI**.
 
 ---
 
 ## BAGIAN 6 — Tes
 
-Buka browser:
+Cek health check:
 
-```
-http://<PUBLIC_IP>
+```bash
+curl http://<STATIC_IP>/up
 ```
 
-Harus muncul JSON:
+Buka di browser `http://<STATIC_IP>` — harus muncul JSON:
 
 ```json
 { "message": "Welcome to Rental Mobil API", "version": "1.0" }
+```
+
+Uji alur auth:
+
+```bash
+# Register user pertama
+curl -X POST http://<STATIC_IP>/api/register \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Admin","email":"admin@mail.com","password":"secret123","password_confirmation":"secret123"}'
+```
+
+Respons berisi `token`. Pakai token itu untuk endpoint lain, mis:
+
+```bash
+curl http://<STATIC_IP>/api/me -H "Authorization: Bearer <TOKEN>"
 ```
 
 🎉 **Aplikasi sudah LIVE.**
@@ -152,14 +150,19 @@ Harus muncul JSON:
 ## BAGIAN 7 (Opsional) — Domain + HTTPS Gratis
 
 Kalau punya domain:
-1. Di DNS domain Anda, buat **A record** mengarah ke `<PUBLIC_IP>`.
+1. Di DNS domain Anda, buat **A record** mengarah ke `<STATIC_IP>`.
 2. Edit [deploy/nginx.conf](deploy/nginx.conf): ganti `server_name _;` → `server_name domain-anda.com;`
-   lalu `sudo cp deploy/nginx.conf /etc/nginx/sites-available/rental-mobil && sudo nginx -t && sudo systemctl reload nginx`.
+   lalu:
+   ```bash
+   sudo cp deploy/nginx.conf /etc/nginx/sites-available/rental-mobil
+   sudo nginx -t && sudo systemctl reload nginx
+   ```
 3. Install SSL gratis (Let's Encrypt):
    ```bash
    sudo apt-get install -y certbot python3-certbot-nginx
    sudo certbot --nginx -d domain-anda.com
    ```
+   (Pastikan port **443/HTTPS** sudah dibuka di firewall Lightsail.)
 4. Ubah `APP_URL=https://domain-anda.com` di `.env`, lalu `php artisan config:cache`.
 
 ---
@@ -169,7 +172,7 @@ Kalau punya domain:
 Setiap ada perubahan kode (sudah di-push ke GitHub):
 
 ```bash
-ssh -i rental-mobil-key.pem ubuntu@<PUBLIC_IP>
+ssh ubuntu@<STATIC_IP>          # atau Connect using SSH dari Lightsail
 cd /var/www/rental-mobil
 bash deploy/deploy.sh
 ```
@@ -184,17 +187,16 @@ bash deploy/deploy.sh
 | **500 / halaman putih** | Lihat log: `tail -50 storage/logs/laravel.log`. Sementara set `APP_DEBUG=true` lalu `php artisan config:cache`. |
 | **"Permission denied" / gagal nulis log** | `sudo chown -R ubuntu:www-data storage bootstrap/cache database && sudo chmod -R 775 storage bootstrap/cache`. |
 | **`database is locked` / gagal migrate** | Pastikan `database/database.sqlite` ada & `chmod 664`, dimiliki `www-data`. |
-| **`composer`/`npm` ke-kill saat install** | RAM habis — pastikan swap aktif: `free -h` (harus ada Swap 2 GB). Jalankan `bash deploy/setup.sh` ulang. |
-| **Tidak bisa diakses dari browser** | Cek Security Group instance: port **80** (HTTP) harus terbuka ke `0.0.0.0/0`. |
+| **`composer install` ke-kill** | RAM habis — pastikan swap aktif: `free -h` (harus ada Swap 2 GB). Jalankan `bash deploy/setup.sh` ulang. |
+| **Tidak bisa diakses dari browser** | Cek **IPv4 Firewall** Lightsail: port **80 (HTTP)** harus ditambahkan. |
 | **Setelah ubah `.env` tidak berubah** | Jalankan `php artisan config:cache` lagi. |
 
 ---
 
 ## Catatan Biaya
 
-- **t2.micro/t3.micro**: gratis 750 jam/bulan selama **12 bulan pertama** (1 instance nonstop = ~730 jam, jadi $0).
-- **SQLite**: tanpa biaya tambahan (tidak pakai RDS).
-- Setelah 12 bulan, instance ini ~$8–10/bulan. Untuk tetap murah, bisa pindah ke
-  **Lightsail $5/bulan** atau matikan instance saat tidak dipakai.
-- **Pantau Free Tier**: AWS Console → Billing → **Free Tier** untuk hindari tagihan tak terduga.
-  Disarankan set **Billing alarm** di $1.
+- **Lightsail $5/bulan**: harga flat, sudah termasuk 1 GB RAM + 40 GB SSD + transfer data.
+  (Sering ada **free trial 3 bulan pertama** untuk paket ini.)
+- **SQLite**: tanpa biaya tambahan (tidak pakai database terkelola).
+- Untuk hemat, matikan/hapus instance saat tidak dipakai dan pantau di
+  **Lightsail → Account → Billing**.
