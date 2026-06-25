@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CSRF Attack - Rental Mobil API</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #1e1e1e;
+            color: #d4d4d4;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: #2d2d2d;
+            padding: 20px;
+            border-radius: 10px;
+        }
+        .danger { color: #f48771; }
+        .success { color: #6a9955; }
+        pre {
+            background: #1e1e1e;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        button {
+            background: #f48771;
+            color: #1e1e1e;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        button:hover { background: #e06c75; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⚠️ CSRF Attack Simulation</h1>
+        <p>Ini adalah <span class="danger">WEBSITE BERBAHAYA</span> yang mencoba menyerang API!</p>
+        
+        <h2>Mengirim Request ke API:</h2>
+        <pre>POST http://127.0.0.1:8000/api/cars</pre>
+        
+        <div id="result"></div>
+        
+        <button onclick="sendCSRFAttack()">🚀 LAUNCH CSRF ATTACK</button>
+        
+        <hr>
+        
+        <h3>Hasil yang Diharapkan:</h3>
+        <pre>
+Jika API RENTAN CSRF:
+- Status: 200 OK
+- Data mobil bertambah
+
+Jika API AMAN CSRF:
+- Status: 401 Unauthorized
+- Response: {"message": "Unauthenticated."}
+        </pre>
+    </div>
+
+    <script>
+        async function sendCSRFAttack() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<p>⏳ Mengirim attack... silakan cek console (F12) untuk melihat response detail</p>';
+            
+            // Data untuk POST request
+            const carData = {
+                brand: "Stolen Car",
+                model: "CSRF Attack",
+                plate_number: "CSRF 001",
+                year: 2024,
+                color: "Black",
+                price_per_day: 1000,
+                status: "available"
+            };
+            
+            try {
+                const response = await fetch('http://127.0.0.1:8000/api/cars', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                        // TIDAK ADA HEADER AUTHORIZATION!
+                    },
+                    body: JSON.stringify(carData)
+                });
+                
+                const data = await response.json();
+                
+                if (response.status === 401) {
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            <h3>✅ API AMAN!</h3>
+                            <p>Status: ${response.status} Unauthorized</p>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                            <p>Mobil TIDAK berhasil ditambahkan karena tidak ada token!</p>
+                        </div>
+                    `;
+                } else if (response.status === 201 || response.status === 200) {
+                    resultDiv.innerHTML = `
+                        <div class="danger">
+                            <h3>❌ API RENTAN CSRF!</h3>
+                            <p>Status: ${response.status}</p>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                            <p>Mobil berhasil ditambahkan tanpa token!</p>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div>
+                            <p>Status: ${response.status}</p>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="danger">
+                        <h3>Error!</h3>
+                        <p>${error.message}</p>
+                        <p>Cek console (F12) untuk detail lebih lanjut</p>
+                    </div>
+                `;
+                console.error('CSRF Attack Error:', error);
+            }
+        }
+    </script>
+</body>
+</html>
