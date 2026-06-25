@@ -7,7 +7,7 @@
 set -euo pipefail
 
 APP_DIR="/var/www/rental-mobil"
-PHP_VER="8.3"
+PHP_VER="8.4"
 cd "${APP_DIR}"
 
 echo ">>> [1/8] Tarik perubahan terbaru dari git"

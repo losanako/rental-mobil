@@ -3,13 +3,13 @@
 # Provisioning awal server EC2 (Ubuntu 22.04/24.04) untuk Laravel.
 # Jalankan SEKALI saja, sebagai user dengan sudo:
 #   bash deploy/setup.sh
-# Script ini: install PHP 8.3 + Nginx + Composer + Node, bikin swap,
+# Script ini: install PHP 8.4 + Nginx + Composer + Node, bikin swap,
 # pasang konfigurasi Nginx, dan set permission.
 # =============================================================================
 set -euo pipefail
 
 APP_DIR="/var/www/rental-mobil"
-PHP_VER="8.3"
+PHP_VER="8.4"
 
 echo ">>> [1/7] Update sistem"
 sudo apt-get update -y && sudo apt-get upgrade -y

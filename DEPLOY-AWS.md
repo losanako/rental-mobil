@@ -86,7 +86,7 @@ chmod +x deploy/*.sh
 bash deploy/setup.sh
 ```
 
-Script ini memasang PHP 8.3, Nginx, Composer, Node 22, membuat swap 2 GB,
+Script ini memasang PHP 8.4, Nginx, Composer, Node 22, membuat swap 2 GB,
 dan mengaktifkan konfigurasi Nginx. Tunggu sampai muncul **SELESAI**.
 
 ---
@@ -180,7 +180,7 @@ bash deploy/deploy.sh
 
 | Masalah | Solusi |
 |---|---|
-| **502 Bad Gateway** | Cek PHP-FPM: `sudo systemctl status php8.3-fpm`. Pastikan socket di `nginx.conf` = `php8.3-fpm.sock`. |
+| **502 Bad Gateway** | Cek PHP-FPM: `sudo systemctl status php8.4-fpm`. Pastikan socket di `nginx.conf` = `php8.4-fpm.sock`. |
 | **500 / halaman putih** | Lihat log: `tail -50 storage/logs/laravel.log`. Sementara set `APP_DEBUG=true` lalu `php artisan config:cache`. |
 | **"Permission denied" / gagal nulis log** | `sudo chown -R ubuntu:www-data storage bootstrap/cache database && sudo chmod -R 775 storage bootstrap/cache`. |
 | **`database is locked` / gagal migrate** | Pastikan `database/database.sqlite` ada & `chmod 664`, dimiliki `www-data`. |
